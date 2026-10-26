@@ -14,14 +14,20 @@
  * limitations under the License.
  */
 
+// inquirer is ESM-only and can't be loaded by ts-jest; these tests don't prompt.
+jest.mock("inquirer", () => ({}));
+
 import { ChangeType } from "@firebaseextensions/firestore-bigquery-change-tracker";
 import { getRowsFromDocs } from "../src/helper";
+
+const updateTime = new Date("2024-01-02T03:04:05.000Z");
 
 describe("getRowsFromDocs", () => {
   it("transforms basic Firestore documents into correct row format", () => {
     const mockDocs = [
       {
         id: "doc1",
+        updateTime: { toDate: () => updateTime },
         ref: {
           path: "users/doc1",
         },
@@ -38,9 +44,7 @@ describe("getRowsFromDocs", () => {
       queryCollectionGroup: false,
     } as any;
 
-    const beforeTimestamp = new Date().toISOString();
     const result = getRowsFromDocs(mockDocs, mockConfig);
-    const afterTimestamp = new Date().toISOString();
 
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
@@ -56,14 +60,15 @@ describe("getRowsFromDocs", () => {
       },
     });
 
-    expect(result[0].timestamp >= beforeTimestamp).toBeTruthy();
-    expect(result[0].timestamp <= afterTimestamp).toBeTruthy();
+    // Uses the document's last write time, not the time of the import.
+    expect(result[0].timestamp).toBe(updateTime.toISOString());
   });
 
   it("correctly extracts wildcard parameters from document paths", () => {
     const mockDocs = [
       {
         id: "paris",
+        updateTime: { toDate: () => updateTime },
         ref: {
           path: "regions/europe/countries/france/cities/paris",
         },
@@ -101,6 +106,7 @@ describe("getRowsFromDocs", () => {
     const mockDocs = [
       {
         id: "paris",
+        updateTime: { toDate: () => updateTime },
         ref: {
           path: "my/cool/collection/doc1",
         },
@@ -138,6 +144,7 @@ describe("getRowsFromDocs", () => {
     const mockDocs = [
       {
         id: "user1",
+        updateTime: { toDate: () => updateTime },
         ref: {
           path: "organizations/org1/users/user1",
         },
@@ -147,6 +154,7 @@ describe("getRowsFromDocs", () => {
       },
       {
         id: "user2",
+        updateTime: { toDate: () => updateTime },
         ref: {
           path: "organizations/org2/users/user2",
         },
@@ -156,6 +164,7 @@ describe("getRowsFromDocs", () => {
       },
       {
         id: "user3",
+        updateTime: { toDate: () => updateTime },
         ref: {
           path: "teams/team1/users/user3", // Different parent path
         },
@@ -201,6 +210,7 @@ describe("getRowsFromDocs", () => {
     const mockDocs = [
       {
         id: "doc1",
+        updateTime: { toDate: () => updateTime },
         ref: {
           path: "my/test1/collection/doc1",
         },
@@ -210,6 +220,7 @@ describe("getRowsFromDocs", () => {
       },
       {
         id: "doc2",
+        updateTime: { toDate: () => updateTime },
         ref: {
           path: "my_other/test2/collection/doc2",
         },
@@ -219,6 +230,7 @@ describe("getRowsFromDocs", () => {
       },
       {
         id: "doc3",
+        updateTime: { toDate: () => updateTime },
         ref: {
           path: "different/test3/collection/doc3",
         },
@@ -269,6 +281,7 @@ describe("getRowsFromDocs", () => {
         .fill(null)
         .map((_, i) => ({
           id: `doc${i}`,
+          updateTime: { toDate: () => updateTime },
           ref: {
             path: `my_other/test${i}/collection/doc${i}`,
           },
@@ -281,6 +294,7 @@ describe("getRowsFromDocs", () => {
         .fill(null)
         .map((_, i) => ({
           id: `other${i}`,
+          updateTime: { toDate: () => updateTime },
           ref: {
             path: `different/test${i}/collection/other${i}`,
           },
@@ -293,6 +307,7 @@ describe("getRowsFromDocs", () => {
         .fill(null)
         .map((_, i) => ({
           id: `another${i}`,
+          updateTime: { toDate: () => updateTime },
           ref: {
             path: `my/test${i}/collection/another${i}`,
           },

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import { FirestoreBigQueryEventHistoryTracker } from "@firebaseextensions/firestore-bigquery-change-tracker";
 import { BigQuery } from "@google-cloud/bigquery";
 
 import { CliConfig } from "./types";
@@ -31,25 +30,24 @@ import { resolveWildcardIds } from "./config";
 
 const FIRESTORE_DEFAULT_DATABASE = "(default)";
 
-// TODO: do we need this logic?
-export const initializeDataSink = async (
-  dataSink: FirestoreBigQueryEventHistoryTracker,
-  config: CliConfig
-) => {
-  const bigQueryProjectId = config.bigQueryProjectId;
+/**
+ * The import only writes rows: it never creates or modifies the dataset,
+ * table schema, partitioning, clustering or views, which the extension
+ * manages. Fails if the raw changelog table isn't there to import into.
+ */
+export const assertChangelogTableExists = async (config: CliConfig) => {
+  const bigquery = new BigQuery({ projectId: config.bigQueryProjectId });
 
-  const bigquery = new BigQuery({ projectId: bigQueryProjectId });
+  const table = bigquery
+    .dataset(config.datasetId, { location: config.datasetLocation })
+    .table(config.rawChangeLogName);
 
-  const dataset = bigquery.dataset(config.datasetId, {
-    location: config.datasetLocation,
-  });
-
-  const table = dataset.table(config.rawChangeLogName);
   const [tableExists] = await table.exists();
-  await dataSink.initialize();
   if (!tableExists) {
-    console.log("Wait a few seconds for the dataset to initialize...");
-    await new Promise((resolve) => setTimeout(resolve, 5000, [])); // Wait for the dataset to initialize
+    throw new Error(
+      `Table ${config.bigQueryProjectId}.${config.datasetId}.${config.rawChangeLogName} does not exist. ` +
+        "Install the extension (or let it create the table) before importing."
+    );
   }
 };
 
@@ -92,7 +90,9 @@ export function getRowsFromDocs(
         }
         if (isMatch) {
           rows.push({
-            timestamp: new Date().toISOString(), // epoch
+            // The document's last write time, so changes the extension
+            // recorded after it still win in the latest view.
+            timestamp: doc.updateTime.toDate().toISOString(),
             operation: ChangeType.IMPORT,
             documentName: `projects/${config.projectId}/databases/${FIRESTORE_DEFAULT_DATABASE}/documents/${path}`,
             documentId: doc.id,
@@ -110,7 +110,7 @@ export function getRowsFromDocs(
     // @ts-expect-error
     rows = docs.map((snapshot) => {
       return {
-        timestamp: new Date().toISOString(), // epoch
+        timestamp: snapshot.updateTime.toDate().toISOString(),
         operation: ChangeType.IMPORT,
         documentName: `projects/${config.projectId}/databases/${FIRESTORE_DEFAULT_DATABASE}/documents/${snapshot.ref.path}`,
         documentId: snapshot.id,

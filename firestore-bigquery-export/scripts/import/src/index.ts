@@ -22,7 +22,7 @@ import * as fs from "fs";
 import * as util from "util";
 
 import { parseConfig } from "./config";
-import { initializeDataSink } from "./helper";
+import { assertChangelogTableExists } from "./helper";
 import * as logs from "./logs";
 import { getCLIOptions } from "./program";
 import { runMultiThread } from "./run-multi-thread";
@@ -84,7 +84,8 @@ const run = async (): Promise<number> => {
 
   // We pass in the application-level "tableId" here. The tracker determines
   // the name of the raw changelog from this field.
-  // TODO: fix this type, it should include clustering apparently
+  // skipInit: true so the import never creates or modifies BigQuery
+  // resources; it only writes rows to the existing changelog table.
   const dataSink = new FirestoreBigQueryEventHistoryTracker({
     tableId: tableId,
     datasetId: datasetId,
@@ -94,9 +95,10 @@ const run = async (): Promise<number> => {
     bqProjectId: bigQueryProjectId,
     transformFunction: transformFunctionUrl,
     firestoreInstanceId: firestoreInstanceId,
+    skipInit: true,
   });
 
-  await initializeDataSink(dataSink, config);
+  await assertChangelogTableExists(config);
 
   logs.importingData(config);
   if (multiThreaded && queryCollectionGroup) {
@@ -106,8 +108,6 @@ const run = async (): Promise<number> => {
     logs.warningMultiThreadedCollectionGroupOnly();
   }
 
-  // Build the data row with a 0 timestamp. This ensures that all other
-  // operations supersede imports when listing the live documents.
   let cursor:
     | firebase.firestore.DocumentSnapshot<firebase.firestore.DocumentData>
     | undefined = undefined;
