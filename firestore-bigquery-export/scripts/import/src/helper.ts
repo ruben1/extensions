@@ -51,6 +51,23 @@ export const assertChangelogTableExists = async (config: CliConfig) => {
   }
 };
 
+/**
+ * Formats a Firestore timestamp with microsecond precision, rounded down.
+ * `Timestamp.toDate()` rounds to the nearest millisecond, which can place an
+ * import row up to 0.5ms after the change the extension recorded for the
+ * same write (the extension's event time keeps microseconds).
+ */
+export function toMicrosIsoString(
+  timestamp: firebase.firestore.Timestamp
+): string {
+  const seconds = new Date(timestamp.seconds * 1000).toISOString();
+  const micros = String(Math.floor(timestamp.nanoseconds / 1000)).padStart(
+    6,
+    "0"
+  );
+  return seconds.replace(/\.\d{3}Z$/, `.${micros}Z`);
+}
+
 export function getRowsFromDocs(
   docs: firebase.firestore.QueryDocumentSnapshot<firebase.firestore.DocumentData>[],
   config: CliConfig
@@ -92,7 +109,7 @@ export function getRowsFromDocs(
           rows.push({
             // The document's last write time, so changes the extension
             // recorded after it still win in the latest view.
-            timestamp: doc.updateTime.toDate().toISOString(),
+            timestamp: toMicrosIsoString(doc.updateTime),
             operation: ChangeType.IMPORT,
             documentName: `projects/${config.projectId}/databases/${FIRESTORE_DEFAULT_DATABASE}/documents/${path}`,
             documentId: doc.id,
@@ -110,7 +127,7 @@ export function getRowsFromDocs(
     // @ts-expect-error
     rows = docs.map((snapshot) => {
       return {
-        timestamp: snapshot.updateTime.toDate().toISOString(),
+        timestamp: toMicrosIsoString(snapshot.updateTime),
         operation: ChangeType.IMPORT,
         documentName: `projects/${config.projectId}/databases/${FIRESTORE_DEFAULT_DATABASE}/documents/${snapshot.ref.path}`,
         documentId: snapshot.id,
